@@ -51,7 +51,9 @@ fn bool? process_source_file(Path path, bool is_dir, any data)
 
         if (catch excuse = formatted)
         {
-            io::eprintfn("Skipping: %s (%s)", path.str_view(), excuse);
+            io::eprintfn("Skipping formatting: %s (%s) - copying original", path.str_view(), excuse);
+            std::io::path::mkdir(target_path.parent()!!, true)!!;
+            std::io::file::save(target_path.str_view(), input)!!;
             int* skipped_ptr = (int*)data + 1;
             (*skipped_ptr)++;
         }
