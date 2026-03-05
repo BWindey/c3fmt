@@ -55,6 +55,13 @@ cp "$STAGING/repo/bindings/c3/tree_sitter_c3.c3l/tree_sitter_c3.c3i" "$STAGING/c
 sed -i 's|../../../src|src|g' "$STAGING/c3l/manifest.json"
 sed -i 's|../../../src|src|g' "$STAGING/c3l/tree_sitter_c3.c3i"
 
+# Ensure Windows targets are available in the manifest (NOTE: fix this upstream)
+for target in "windows-x64"; do
+    if ! grep -q "$target" "$STAGING/c3l/manifest.json"; then
+        sed -i 's|"targets" : {|"targets" : {\n    "'"$target"'" : { },|g' "$STAGING/c3l/manifest.json"
+    fi
+done
+
 cp "$STAGING/repo/src/parser.c" "$STAGING/repo/src/scanner.c" \
    "$STAGING/repo/src/node-types.json" "$STAGING/repo/src/grammar.json" "$STAGING/c3l/src/"
 
