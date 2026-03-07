@@ -421,6 +421,10 @@ fn void C3Fmt.print_line(&self, Token[] tokens, usz indent_level)
 					new_buf.push(token);
 			}
 		}
+		if (new_buf.len() > 0 && new_buf.last()!!.kind != NEWLINE && new_buf.last()!!.kind != EOF)
+		{
+			new_buf.push(token::newline());
+		}
 		self.print_line(new_buf.array_view(), indent_level);
 		new_buf.free();
 

@@ -930,6 +930,11 @@ fn void C3Fmt.process_node(
 				case "=>":
 					self.buf.space();
 					self.process_composite(node, append_newline: false);
+				case "call_expr":
+					self.buf.space();
+					self.buf.text("=>");
+					self.buf.space();
+					self.process_node(child);
 			}
 		case "implies_body":
 			self.process_composite(node);
@@ -952,6 +957,8 @@ fn void C3Fmt.process_node(
 		case "struct_member_declaration":
 			self.process_composite(node, append_newline: true);
 		case "enum_declaration":
+			self.process_composite(node, append_newline: true);
+		case "constdef_declaration":
 			self.process_composite(node, append_newline: true);
 		case "enum_spec":
 			self.process_composite(node);
