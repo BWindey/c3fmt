@@ -127,9 +127,8 @@ fn String Token.print(&self)
 		case INLINE_COMMENT:
 			return self.str;
 		case INDENT:
-			unreachable();
 		case DEDENT:
-			unreachable();
+			return "";
 		case ALIGN:
 			return "";
 	}
@@ -198,7 +197,22 @@ fn void C3Fmt.print(&self)
 	$endif
 
 	usz indent_level = 0;
-	for (usz i = 0, usz j = 0; j < token_count; ++j)
+	usz i = 0;
+	while (i < token_count && (self.buf[i].kind == INDENT || self.buf[i].kind == DEDENT))
+	{
+		if (self.buf[i].kind == INDENT)
+		{
+			indent_level++;
+		}
+		else if (self.buf[i].kind == DEDENT)
+		{
+			assert (indent_level > 0);
+			indent_level--;
+		}
+		i++;
+	}
+
+	for (usz j = i; j < token_count; ++j)
 	{
 		switch (self.buf[j].kind)
 		{
@@ -206,10 +220,20 @@ fn void C3Fmt.print(&self)
 				assert (i <= j);
 				self.print_line(self.buf.array_view()[i..j], indent_level);
 				i = j + 1;
-				while (self.buf[i].kind == INDENT || self.buf[i].kind == DEDENT)
+				while (i < token_count && (self.buf[i].kind == INDENT || self.buf[i].kind == DEDENT))
 				{
+					if (self.buf[i].kind == INDENT)
+					{
+						indent_level++;
+					}
+					else if (self.buf[i].kind == DEDENT)
+					{
+						assert (indent_level > 0);
+						indent_level--;
+					}
 					i++;
 				}
+				j = i - 1;
 			case EOF:
 				assert (i <= j);
 				self.print_line(self.buf.array_view()[i..j], indent_level);
@@ -302,7 +326,6 @@ fn void dbg(Token[] tokens) @if($feature(DEBUG))
 		}
 		io::printf(" ");
 	}
-	io::printfn("");
 }
 
 fn void C3Fmt.print_line(&self, Token[] tokens, usz indent_level)

@@ -522,7 +522,8 @@ fn void C3Fmt.process_composite(
 	String[] skip_space_if_after = { },
 	bool append_newline = false,
 	AddWrapPointFn add_wrap_point_fn = null,
-	usz group_id = 0
+	usz group_id = 0,
+	bool respect_input_newlines = false
 )
 {
 	bool found_inline = false;
@@ -539,7 +540,14 @@ fn void C3Fmt.process_composite(
 			&& !skip_space_if_after.contains(prev_type)
 			&& !(prev_type.starts_with("$") && (type == "paren_expr" || type == "(")))
 		{
-			self.buf.space();
+			if (respect_input_newlines && child.start_point_row() > ts::node_child(node, i - 1).end_point_row())
+			{
+				self.buf.newline();
+			}
+			else
+			{
+				self.buf.space();
+			}
 		}
 
 		if (add_wrap_point_fn && self.wrapping_enabled)
@@ -575,7 +583,19 @@ fn void C3Fmt.process_composite(
 			}
 			else
 			{
-				self.buf.text(child.get_text(self.source_code));
+				String text = child.get_text(self.source_code);
+				self.buf.text(text);
+				if (respect_input_newlines)
+				{
+					if (text == "{")
+					{
+						self.indent();
+					}
+					else if (text == "}")
+					{
+						self.dedent();
+					}
+				}
 			}
 		}
 	}
@@ -1654,22 +1674,32 @@ fn void C3Fmt.process_node(
 		case "initializer_list":
 			if (node.has_child_of_type("initializer_element"))
 			{
-				usz id = self.begin_wrap_group(2);
-				self.process_composite(
-					node,
-					skip_space_type: { "," },
-					add_wrap_point_fn: fn (String type, String field, usz id)
+				bool is_manual_multiline = node.start_point_row() != node.end_point_row();
+				uint count = ts::node_named_child_count(node);
+
+				if (is_manual_multiline && count > 10)
 				{
-					switch (type)
+					self.process_composite(node, skip_space_type: { "," }, respect_input_newlines: true);
+				}
+				else
+				{
+					usz id = self.begin_wrap_group(2);
+					self.process_composite(
+						node,
+						skip_space_type: { "," },
+						add_wrap_point_fn: fn (String type, String field, usz id)
 					{
-						case "initializer_element":
-							return { .indent = 1, .group_id = id };
-						case "}":
-							return { .indent = 0, .group_id = id };
-						default:
-							return NO_WRAP~;
-					}
-				}, group_id: id);
+						switch (type)
+						{
+							case "initializer_element":
+								return { .indent = 1, .group_id = id };
+							case "}":
+								return { .indent = 0, .group_id = id };
+							default:
+								return NO_WRAP~;
+						}
+					}, group_id: id);
+				}
 			}
 			else
 			{
