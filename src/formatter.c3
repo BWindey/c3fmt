@@ -366,8 +366,12 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 
 			self.buf.push(token::align(max_op_col));
 			self.buf.push(token::space());
-			// self.buf.push(token::text(op.get_text(self.source_code)));
-			// self.buf.push(token::space());
+
+			if (!ts::node_is_null(right))
+			{
+				self.buf.push(token::text(op.get_text(self.source_code)));
+				self.buf.push(token::space());
+			}
 
 			TSNode right_to_use = ts::node_is_null(right) ? op : right;
 
