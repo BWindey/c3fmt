@@ -215,6 +215,29 @@ fn bool C3Fmt.reattach_comment(&self, TSNode child, int blank_line_amount, bool 
 
 faultdef NOT_FOUND;
 
+fn bool C3Fmt.has_trailing_comma(&self, TSNode node)
+{
+	TSNode parent = ts::node_parent(node);
+	if (ts::node_is_null(parent)) return false;
+
+	bool start_searching = false;
+	for (uint i = 0; i < ts::node_child_count(parent); ++i)
+	{
+		TSNode child = ts::node_child(parent, i);
+		if (ts::node_eq(child, node))
+		{
+			start_searching = true;
+			continue;
+		}
+		if (start_searching)
+		{
+			if (child.type() == ",") return true;
+			if (ts::node_is_named(child) || child.type() == "}" || child.type() == "{") return false;
+		}
+	}
+	return false;
+}
+
 fn bool is_alignable_block_node(TSNode node)
 {
 	String type = node.type();
@@ -225,7 +248,7 @@ fn bool is_alignable_block_node(TSNode node)
 		String inner_type = inner.type();
 		return inner_type == "const_declaration" || inner_type == "var_declaration";
 	}
-	return type == "const_declaration" || type == "var_declaration" || type == "macro_declaration";
+	return type == "const_declaration" || type == "var_declaration" || type == "macro_declaration" || type == "enum_constant";
 }
 
 fn TSNode find_assignment_op(TSNode node)
@@ -243,6 +266,7 @@ fn TSNode find_assignment_op(TSNode node)
 		TSNode c = ts::node_child(target, i);
 		String t = c.type();
 		if (t == "=" || t == "=>") return c;
+		if ((t == "initializer_list" || t == "enum_arg") && type == "enum_constant") return c;
 		if (t == "macro_func_body")
 		{
 			if (c.has_child_of_type("implies_body")) return c;
@@ -409,6 +433,11 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 					TSNode sc = ts::node_child(child, s);
 					if (sc.type() == ";") self.buf.push(token::text(";"));
 				}
+			}
+
+			if (self.has_trailing_comma(child))
+			{
+				self.buf.text(",");
 			}
 
 			// Handle trailing comment alignment
