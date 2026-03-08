@@ -225,7 +225,7 @@ fn bool is_alignable_block_node(TSNode node)
 		String inner_type = inner.type();
 		return inner_type == "const_declaration" || inner_type == "var_declaration";
 	}
-	return type == "const_declaration" || type == "var_declaration";
+	return type == "const_declaration" || type == "var_declaration" || type == "macro_declaration";
 }
 
 fn TSNode find_assignment_op(TSNode node)
@@ -241,7 +241,12 @@ fn TSNode find_assignment_op(TSNode node)
 	for (uint i = 0; i < ts::node_child_count(target); ++i)
 	{
 		TSNode c = ts::node_child(target, i);
-		if (c.type() == "=") return c;
+		String t = c.type();
+		if (t == "=" || t == "=>") return c;
+		if (t == "macro_func_body")
+		{
+			if (c.has_child_of_type("implies_body")) return c;
+		}
 	}
 	return (TSNode){};
 }
@@ -272,12 +277,12 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 				TSNode c = ts::node_child(target, k);
 				if (ts::node_eq(c, op)) break;
 				if (ts::node_is_named(c)) {
-					if (!first) self.buf.push(token::space());
+					if (!first && c.type() != "macro_param_list") self.buf.push(token::space());
 					self.process_node(c);
 					first = false;
 				} else {
 					String t = c.get_text(self.source_code);
-					if (t == "const" || t == "var" || t == "static" || t == "pub") {
+					if (t == "const" || t == "var" || t == "static" || t == "pub" || t == "macro") {
 						if (!first) self.buf.push(token::space());
 						self.buf.push(token::text(t));
 						first = false;
@@ -314,6 +319,11 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 		}
 	}
 
+	if (max_op_col > 80) {
+		max_op_col = 0;
+	}
+
+
 	// Final pass
 	uint i = start_index;
 	while (i < end_index)
@@ -329,10 +339,10 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 		}
 
 		TSNode op = find_assignment_op(child);
-		if (!ts::node_is_null(op))
+		if (!ts::node_is_null(op) && max_op_col > 0)
 		{
 			TSNode target = (child.type() == "declaration_stmt" || child.type() == "global_declaration") ? ts::node_named_child(child, 0) : child;
-			TSNode right = target.get_child_with_field("right");
+			TSNode right = (target.type() == "macro_declaration" || !target.has_child_with_field("right")) ? (TSNode){} : target.get_child_with_field("right");
 
 			// Format until '='
 			uint k = 0;
@@ -341,12 +351,12 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 				TSNode c = ts::node_child(target, k);
 				if (ts::node_eq(c, op)) break;
 				if (ts::node_is_named(c)) {
-					if (!first) self.buf.push(token::space());
+					if (!first && c.type() != "macro_param_list") self.buf.push(token::space());
 					self.process_node(c);
 					first = false;
 				} else {
 					String t = c.get_text(self.source_code);
-					if (t == "const" || t == "var" || t == "static" || t == "pub") {
+					if (t == "const" || t == "var" || t == "static" || t == "pub" || t == "macro") {
 						if (!first) self.buf.push(token::space());
 						self.buf.push(token::text(t));
 						first = false;
@@ -356,19 +366,24 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 
 			self.buf.push(token::align(max_op_col));
 			self.buf.push(token::space());
-			self.buf.push(token::text("="));
-			self.buf.push(token::space());
+			// self.buf.push(token::text(op.get_text(self.source_code)));
+			// self.buf.push(token::space());
+
+			TSNode right_to_use = ts::node_is_null(right) ? op : right;
 
 			// Value alignment logic for math signs
-			if (!ts::node_is_null(right)) {
-				String text = right.get_text(self.source_code);
+			if (!ts::node_is_null(right_to_use)) {
+				String text = right_to_use.get_text(self.source_code);
 				bool has_negatives = false;
 				for (uint m = start_index; m < end_index; ++m) {
 					TSNode decl = ts::node_named_child(parent, m);
 					TSNode op2 = find_assignment_op(decl);
 					if (!ts::node_is_null(op2)) {
 						TSNode t2 = (decl.type() == "declaration_stmt" || decl.type() == "global_declaration") ? ts::node_named_child(decl, 0) : decl;
-						TSNode r2 = t2.get_child_with_field("right");
+						TSNode r2 = (t2.type() == "macro_declaration" || !t2.has_child_with_field("right")) ? (TSNode){} : t2.get_child_with_field("right");
+						// For macros, the 'right' side is the body, but it starts with =>
+						if (ts::node_is_null(r2) && t2.type() == "macro_declaration") r2 = op2;
+
 						if (!ts::node_is_null(r2) && r2.get_text(self.source_code).starts_with("-")) {
 							has_negatives = true;
 							break;
@@ -378,7 +393,7 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 				if (has_negatives && !text.starts_with("-")) {
 					self.buf.push(token::space());
 				}
-				self.process_node(right);
+				self.process_node(right_to_use);
 			}
 
 			// Format rest (normally just ';')
