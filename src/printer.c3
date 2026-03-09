@@ -11,6 +11,7 @@ enum TokenKind
 	BEGIN_WRAP_GROUP,
 	WRAP_POINT,
 	INLINE_COMMENT,
+	ALIGN,
 }
 
 struct WrapPoint
@@ -26,6 +27,7 @@ struct Token
 	String str;
 
 	WrapPoint wrap_point;
+	usz align_col;
 }
 
 fn Token eof()
@@ -76,6 +78,11 @@ fn Token wrap_point(WrapPoint wrap_point)
 	return (Token) { .kind = WRAP_POINT, .wrap_point = wrap_point };
 }
 
+fn Token align(usz col)
+{
+	return (Token) { .kind = ALIGN, .align_col = col };
+}
+
 fn bool Token.is(&self, TokenKind kind)
 {
 	return self.kind == kind;
@@ -98,6 +105,8 @@ fn usz Token.len(&self)
 			return self.str.len;
 		case INLINE_COMMENT:
 			return self.str.len + 3;
+		case ALIGN:
+			return 0;
 	}
 }
 
@@ -118,9 +127,10 @@ fn String Token.print(&self)
 		case INLINE_COMMENT:
 			return self.str;
 		case INDENT:
-			unreachable();
 		case DEDENT:
-			unreachable();
+			return "";
+		case ALIGN:
+			return "";
 	}
 }
 
@@ -187,7 +197,22 @@ fn void C3Fmt.print(&self)
 	$endif
 
 	usz indent_level = 0;
-	for (usz i = 0, usz j = 0; j < token_count; ++j)
+	usz i = 0;
+	while (i < token_count && (self.buf[i].kind == INDENT || self.buf[i].kind == DEDENT))
+	{
+		if (self.buf[i].kind == INDENT)
+		{
+			indent_level++;
+		}
+		else if (self.buf[i].kind == DEDENT)
+		{
+			assert (indent_level > 0);
+			indent_level--;
+		}
+		i++;
+	}
+
+	for (usz j = i; j < token_count; ++j)
 	{
 		switch (self.buf[j].kind)
 		{
@@ -195,10 +220,20 @@ fn void C3Fmt.print(&self)
 				assert (i <= j);
 				self.print_line(self.buf.array_view()[i..j], indent_level);
 				i = j + 1;
-				while (self.buf[i].kind == INDENT || self.buf[i].kind == DEDENT)
+				while (i < token_count && (self.buf[i].kind == INDENT || self.buf[i].kind == DEDENT))
 				{
+					if (self.buf[i].kind == INDENT)
+					{
+						indent_level++;
+					}
+					else if (self.buf[i].kind == DEDENT)
+					{
+						assert (indent_level > 0);
+						indent_level--;
+					}
 					i++;
 				}
+				j = i - 1;
 			case EOF:
 				assert (i <= j);
 				self.print_line(self.buf.array_view()[i..j], indent_level);
@@ -231,11 +266,6 @@ fn usz C3Fmt.calculate_line_length(&self, Token[] tokens, usz indent_level)
 {
 	usz line_length = 0;
 
-	foreach (token : tokens)
-	{
-		line_length += token.len();
-	}
-
 	for (usz i = 0; i < indent_level; ++i)
 	{
 		if (self.config.use_tabs)
@@ -245,6 +275,21 @@ fn usz C3Fmt.calculate_line_length(&self, Token[] tokens, usz indent_level)
 		else
 		{
 			line_length += self.config.indent_width;
+		}
+	}
+
+	foreach (token : tokens)
+	{
+		if (token.kind == ALIGN)
+		{
+			if (token.align_col > line_length)
+			{
+				line_length = token.align_col;
+			}
+		}
+		else
+		{
+			line_length += token.len();
 		}
 	}
 
@@ -281,7 +326,6 @@ fn void dbg(Token[] tokens) @if($feature(DEBUG))
 		}
 		io::printf(" ");
 	}
-	io::printfn("");
 }
 
 fn void C3Fmt.print_line(&self, Token[] tokens, usz indent_level)
@@ -421,26 +465,47 @@ fn void C3Fmt.print_line(&self, Token[] tokens, usz indent_level)
 					new_buf.push(token);
 			}
 		}
+		if (new_buf.len() > 0 && new_buf.last()!!.kind != NEWLINE && new_buf.last()!!.kind != EOF)
+		{
+			new_buf.push(token::newline());
+		}
 		self.print_line(new_buf.array_view(), indent_level);
 		new_buf.free();
 
 		return;
 	}
 
+	usz current_col = 0;
 	for (usz i = 0; i < indent_level; ++i)
 	{
+		current_col += self.config.use_tabs ? self.config.tab_size : self.config.indent_width;
 		self.print_indent();
 	}
 
 	foreach (id, token : tokens)
 	{
-		// trim space that could be there because of wrapping
-		if (token.kind == SPACE
-			&& (id < (tokens.len - 1) && tokens[id + 1].kind == NEWLINE))
+		if (token.kind == ALIGN)
 		{
-			continue;
+			if (token.align_col > current_col)
+			{
+				for (usz j = 0; j < token.align_col - current_col; ++j)
+				{
+					self.dstr_buf.append(' ');
+				}
+				current_col = token.align_col;
+			}
 		}
-		self.dstr_buf.append(token.print());
+		else
+		{
+			// trim space that could be there because of wrapping
+			if (token.kind == SPACE
+				&& (id < (tokens.len - 1) && tokens[id + 1].kind == NEWLINE))
+			{
+				continue;
+			}
+			self.dstr_buf.append(token.print());
+			current_col += token.len();
+		}
 	}
 }
 

@@ -17,6 +17,9 @@ struct Config
 
 	BraceStyle brace_style;
 	bool else_on_newline;
+
+	bool align_assignments;
+	bool align_comments;
 }
 
 fn Config default_config()
@@ -26,9 +29,11 @@ fn Config default_config()
 		.tab_size = 4,
 		.indent_width = 4,
 		.max_blank_line_between_statements = 2,
-		.max_line_length = 80,
+		.max_line_length = 250,
 		.brace_style = ALLMAN,
 		.else_on_newline = true,
+		.align_assignments = true,
+		.align_comments = true,
 	};
 }
 
@@ -55,7 +60,7 @@ fn Config? parse_from_file(String file_path) => @pool()
 {
 	Config conf = default_config();
 
-	String content = (String)file::load(mem, file_path)!;
+	String content = (String)file::load(tmem, file_path)!;
 	String[] lines = content.split(tmem, "\n");
 
 	foreach (raw_line : lines)
@@ -109,6 +114,10 @@ fn Config? parse_from_file(String file_path) => @pool()
 				}
 			case "else_on_newline":
 				conf.else_on_newline = val.to_bool()!;
+			case "align_assignments":
+				conf.align_assignments = val.to_bool()!;
+			case "align_comments":
+				conf.align_comments = val.to_bool()!;
 
 			default:
 				return INVALID_CONFIG~;

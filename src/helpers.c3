@@ -27,6 +27,20 @@ fn TSNode TSNode.get_child_with_field(self, String field_name)
 	unreachable();
 }
 
+fn bool TSNode.has_child_with_field(self, String field_name)
+{
+	for (uint i = 0; i < ts::node_child_count(self); ++i)
+	{
+		TSNode child = ts::node_child(self, i);
+		if (child.field_name() == field_name)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 fn bool TSNode.has_child_of_type(self, String type)
 {
 	for (uint i = 0; i < ts::node_child_count(self); ++i)
@@ -109,4 +123,10 @@ fn bool same_semantic(TSNode a, TSNode b)
 	}
 
 	return true;
+}
+
+fn bool TSNode.contains_node(self, TSNode other)
+{
+	if (ts::node_is_null(self) || ts::node_is_null(other)) return false;
+	return other.start_byte() >= self.start_byte() && other.end_byte() <= self.end_byte();
 }
