@@ -28,9 +28,11 @@ module c3fmt::executable;
 import c3fmt;
 import opt;
 import std::io;
+import std::io::path;
 import std::thread;
 import std::os;
 import std::collections::list;
+import std::os::posix;
 
 alias FileList = List { String };
 
@@ -224,17 +226,7 @@ fn int main(String[] args)
 	for (int i = arg_last_parsed; i < args.len; ++i)
 	{
 		String entry = args[i];
-		if (io::path::is_dir(io::path::temp(entry)!!))
-		{
-			if (catch err = io::path::traverse(io::path::temp(entry)!!, &collect_callback, &files))
-			{
-				io::eprintfn("Warning: could not traverse directory %s: %s", entry, err);
-			}
-		}
-		else
-		{
-			files.push(entry.copy(mem));
-		}
+		fast_scan(entry, &files);
 	}
 
 	if (files.len() == 0) return 0;
@@ -250,6 +242,66 @@ fn int main(String[] args)
 	pool.join();
 
 	return ctx.has_mismatch ? 1 : 0;
+}
+
+fn void fast_scan(String entry, FileList* files)
+{
+	if (!io::path::is_dir(io::path::temp(entry)!!))
+	{
+		files.push(entry.copy(mem));
+		return;
+	}
+
+	DString path_buf = dstring::new(mem);
+	defer path_buf.free();
+	path_buf.append(entry);
+
+	fast_scan_recursive(&path_buf, files);
+}
+
+fn void fast_scan_recursive(DString* path_buf, FileList* files)
+{
+	usz original_len = path_buf.len();
+	String current_path = path_buf.str_view();
+
+	$if env::POSIX:
+		DIRPtr dir = posix::opendir(current_path.zstr_tcopy());
+		if (!dir) return;
+		defer posix::closedir(dir);
+
+		while (Posix_dirent* entry = posix::readdir(dir))
+		{
+			String name = ((ZString)&entry.name).str_view();
+			if (name == "." || name == "..") continue;
+
+			(*path_buf).chop(original_len);
+			if (path_buf.len() > 0 && (*path_buf)[path_buf.len() - 1] != '/') path_buf.append('/');
+			path_buf.append(name);
+
+			if (entry.d_type == posix::DT_DIR)
+			{
+				fast_scan_recursive(path_buf, files);
+			}
+			else if (entry.d_type == posix::DT_REG || entry.d_type == posix::DT_UNKNOWN)
+			{
+				if (path_buf.str_view().ends_with(".c3"))
+				{
+					if (entry.d_type == posix::DT_UNKNOWN && !io::path::is_file(io::path::temp(path_buf.str_view())!!))
+					{
+						if (io::path::is_dir(io::path::temp(path_buf.str_view())!!))
+						{
+							fast_scan_recursive(path_buf, files);
+						}
+						continue;
+					}
+					files.push(path_buf.str_view().copy(mem));
+				}
+			}
+		}
+	$else
+		// Fallback to standard traverse for non-POSIX (Windows handling would be more complex)
+		(void)io::path::traverse(io::path::temp(current_path)!!, &collect_callback, files);
+	$endif
 }
 
 fn bool? collect_callback(io::path::Path p, bool is_dir, any data)
