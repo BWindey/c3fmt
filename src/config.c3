@@ -60,7 +60,7 @@ fn Config? parse_from_file(String file_path) => @pool()
 {
 	Config conf = default_config();
 
-	String content = (String)file::load(mem, file_path)!;
+	String content = (String)file::load(tmem, file_path)!;
 	String[] lines = content.split(tmem, "\n");
 
 	foreach (raw_line : lines)
