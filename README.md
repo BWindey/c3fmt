@@ -78,11 +78,7 @@ The test suite includes:
 
 ## Planned features / wishlist
 
-- Code wrapping (current breaks with nested constructions).
-- Align consecutive assignments / declaration / comments.
 - Wrapping indent option (ContinuationIndentWidth).
-- Align wrapped items.
-- Space before `<...>` options.
 - Import sorting.
 - Pointer alignment calibration.
 
