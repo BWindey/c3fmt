@@ -23,14 +23,13 @@ fn String? format_string(
 	return formatter.dstr_buf.copy_str(allocator);
 }
 
+<* c3fmt executable entry point *>
 module c3fmt::executable;
 
 import c3fmt;
 import opt;
-import std::io;
-import std::thread;
-import std::os;
-import std::collections::list;
+import std;
+import libc;
 
 alias FileList = List { String };
 
@@ -42,6 +41,7 @@ struct CLIOptions
 	bool stdin;
 	String config;
 	bool force_default_config;
+	bool check;
 }
 
 CLIOptions cli_options;
@@ -49,7 +49,8 @@ CLIOptions cli_options;
 struct Context
 {
 	Config config;
-	thread::Mutex print_mu;
+	Mutex print_mu;
+	bool has_mismatch;
 }
 
 fn void format_worker(any[] args)
@@ -57,11 +58,21 @@ fn void format_worker(any[] args)
 	String path = *(String*)args[0].ptr;
 	Config config = *(Config*)args[1].ptr;
 	Context* ctx = *(Context**)args[2].ptr;
-	(void)format_file(path, config, ctx);
+	if (catch excuse = format_file(path, config, ctx))
+	{
+		io::eprintfn("Error: could not format file %s: %s.", path, excuse);
+	}
 }
 
 fn int main(String[] args)
 {
+	Context ctx;
+	if (catch err = ctx.print_mu.init())
+	{
+		io::eprintfn("Mutex error: %s.", err);
+		return 1;
+	}
+
 	bool version_asked;
 	// c3fmt off
 	int? arg_last_parsed = opt::@parse(//
@@ -86,7 +97,10 @@ fn int main(String[] args)
 		&cli_options.config, //
 		null,
 		"default",
-		&cli_options.force_default_config
+		&cli_options.force_default_config, //
+		null,
+		"check",
+		&cli_options.check
 	);
 	// c3fmt on
 
@@ -107,6 +121,7 @@ fn int main(String[] args)
 				io::printfn("\t--stdout         - Output result to stdout.");
 				io::printfn("\t--config=<path>  - Specify a config file.");
 				io::printfn("\t--default        - Force default config.");
+				io::printfn("\t--check          - Finish with error if files are not formatted.");
 				return 1;
 			default:
 				return 1;
@@ -115,8 +130,8 @@ fn int main(String[] args)
 
 	if (version_asked)
 	{
-		io::printfn("c3fmt version:     \t0.2.0");
-		io::printfn("target c3c version:\t0.7.9");
+		io::printfn("c3fmt version:     \t0.2.3");
+		io::printfn("target c3c version:\t0.7.11");
 		return 0;
 	}
 
@@ -179,7 +194,7 @@ fn int main(String[] args)
 		}
 
 		String? formatted = c3fmt::format_string(mem, read.str_view(), config);
-		defer (void)formatted.free(mem);
+		defer formatted.free(mem)!!;
 
 		if (catch excuse = formatted)
 		{
@@ -197,18 +212,16 @@ fn int main(String[] args)
 		return 1;
 	}
 
-	if (!cli_options.in_place && !cli_options.stdout)
+	if (!cli_options.in_place && !cli_options.stdout && !cli_options.check)
 	{
 		cli_options.stdout = true;
 	}
 
-	Context ctx;
 	ctx.config = config;
-	ctx.print_mu.init()!!;
-	defer (void)ctx.print_mu.destroy();
+	ctx.has_mismatch = false;
 
 	FileList files;
-	files.init(mem);
+	files.init(mem, 512);
 	defer {
 		foreach (f : files) f.free(mem);
 		files.free();
@@ -217,14 +230,7 @@ fn int main(String[] args)
 	for (int i = arg_last_parsed; i < args.len; ++i)
 	{
 		String entry = args[i];
-		if (io::path::is_dir(io::path::temp(entry)!!))
-		{
-			io::path::traverse(io::path::temp(entry)!!, &collect_callback, &files)!!;
-		}
-		else
-		{
-			files.push(entry.copy(mem));
-		}
+		fast_scan(entry, &files);
 	}
 
 	if (files.len() == 0) return 0;
@@ -239,7 +245,67 @@ fn int main(String[] args)
 	}
 	pool.join();
 
-	return 0;
+	return ctx.has_mismatch ? 1 : 0;
+}
+
+fn void fast_scan(String entry, FileList* files)
+{
+	if (!io::path::is_dir(io::path::temp(entry)!!))
+	{
+		files.push(entry.copy(mem));
+		return;
+	}
+
+	DString path_buf = dstring::new(mem);
+	defer path_buf.free();
+	path_buf.append(entry);
+
+	fast_scan_recursive(&path_buf, files);
+}
+
+fn void fast_scan_recursive(DString* path_buf, FileList* files)
+{
+	usz original_len = path_buf.len();
+	String current_path = path_buf.str_view();
+
+	$if env::POSIX:
+		DIRPtr dir = posix::opendir(current_path.zstr_tcopy());
+		if (!dir) return;
+		defer posix::closedir(dir);
+
+		while (Posix_dirent* entry = posix::readdir(dir))
+		{
+			String name = ((ZString)&entry.name).str_view();
+			if (name == "." || name == "..") continue;
+
+			(*path_buf).chop(original_len);
+			if (path_buf.len() > 0 && (*path_buf)[path_buf.len() - 1] != '/') path_buf.append('/');
+			path_buf.append(name);
+
+			if (entry.d_type == posix::DT_DIR)
+			{
+				fast_scan_recursive(path_buf, files);
+			}
+			else if (entry.d_type == posix::DT_REG || entry.d_type == posix::DT_UNKNOWN)
+			{
+				if (path_buf.str_view().ends_with(".c3"))
+				{
+					if (entry.d_type == posix::DT_UNKNOWN && !io::path::is_file(io::path::temp(path_buf.str_view())!!))
+					{
+						if (io::path::is_dir(io::path::temp(path_buf.str_view())!!))
+						{
+							fast_scan_recursive(path_buf, files);
+						}
+						continue;
+					}
+					files.push(path_buf.str_view().copy(mem));
+				}
+			}
+		}
+	$else
+		// Fallback to standard traverse for non-POSIX (Windows handling would be more complex)
+		(void)io::path::traverse(io::path::temp(current_path)!!, &collect_callback, files);
+	$endif
 }
 
 fn bool? collect_callback(io::path::Path p, bool is_dir, any data)
@@ -258,49 +324,61 @@ fn void? format_file(String path, Config config, Context* ctx)
 	String? content = (String)file::load(mem, path);
 	defer (void)content.free(mem);
 
-	if (catch excuse = content)
+	Mutex.@in_lock(&ctx.print_mu)
 	{
-		ctx.print_mu.lock();
-		io::eprintfn("Error: could not read file %s: %s", path, excuse);
-		ctx.print_mu.unlock();
-		return excuse~;
-	}
-
-	String? formatted = c3fmt::format_string(mem, content, config);
-	defer (void)formatted.free(mem);
-
-	if (catch excuse = formatted)
-	{
-		ctx.print_mu.lock();
-		io::eprintfn(
-			"Error: could not format file %s: %s.",
-			path,
-			excuse
-		);
-		ctx.print_mu.unlock();
-		return excuse~;
-	}
-
-	if (cli_options.in_place)
-	{
-		if (catch excuse = file::save(path, formatted))
+		if (catch excuse = content)
 		{
-			ctx.print_mu.lock();
-			io::eprintfn(
-				"Error: could not write to file %s: %s",
-				path,
-				excuse
-			);
-			ctx.print_mu.unlock();
+			io::eprintfn("Error: could not read file %s: %s", path, excuse);
 			return excuse~;
 		}
-	}
 
-	if (cli_options.stdout)
-	{
-		ctx.print_mu.lock();
-		io::printfn("%s", formatted);
-		ctx.print_mu.unlock();
-	}
+		String? formatted = c3fmt::format_string(mem, content, config);
+		defer (void)formatted.free(mem);
+
+		if (catch excuse = formatted)
+		{
+			io::eprintfn("Error: could not format file %s: %s.", path, excuse);
+			return excuse~;
+		}
+
+		switch
+		{
+			case cli_options.in_place:
+				if (catch excuse = file::save(path, formatted))
+				{
+					io::eprintfn("Error: could not write to file %s: %s", path, excuse);
+					return excuse~;
+				}
+			case cli_options.stdout:
+				io::printfn("%s", formatted);
+			case cli_options.check:
+				if (content != formatted)
+				{
+					io::eprintfn("Format mismatch: %s", path);
+
+					// Show diff if possible
+					if (try p = process::spawn({"diff", "--unified=0", "-p", "--color=always", "--label", path, "--label", "formatted", path, "-"}))
+					{
+						(void)p.write_stdin(formatted);
+						// Close stdin to signal end of input
+						libc::fclose(p.stdin_file);
+						p.stdin_file = null;
+
+						char[1024] buf;
+						while (try len = p.read_stdout(&buf, buf.len))
+						{
+							if (len == 0) break;
+							io::print((String)buf[:len]);
+						}
+						(void)p.join();
+						p.destroy();
+					}
+
+					ctx.has_mismatch = true;
+				}
+			default:
+		}
+
+	};
 	return;
 }
