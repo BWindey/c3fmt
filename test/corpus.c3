@@ -73,3 +73,7 @@ fn void alignment() @test {
     conf.max_line_length = 180;
     test("alignment", "test/corpus/alignment.c3", "test/corpus/alignment_f.c3", conf);
 }
+
+fn void generics() @test {
+    test("generics", "test/corpus/generics.c3", "test/corpus/generics_f.c3");
+}

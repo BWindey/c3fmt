@@ -1288,18 +1288,18 @@ fn void C3Fmt.process_node(
 		case "func_declaration":
 			self.process_composite(
 				node,
-				skip_space_type: { ";", "func_param_list" },
+				skip_space_type: { ";", "func_param_list", "generic_param_list", "generic_arg_list" },
 			);
 		case "interface_func_declaration":
 			self.process_composite(
 				node,
-				skip_space_type: { ";", "func_param_list" },
+				skip_space_type: { ";", "func_param_list", "generic_param_list", "generic_arg_list" },
 				append_newline: true
 			);
 		case "func_definition":
 			self.process_composite(
 				node,
-				skip_space_type: { "func_param_list", "macro_func_body" },
+				skip_space_type: { "func_param_list", "macro_func_body", "generic_param_list", "generic_arg_list" },
 				append_newline: true
 			);
 		case "func_header":
@@ -1408,7 +1408,11 @@ fn void C3Fmt.process_node(
 		/* DECLARATION */
 		/* ======================================== */
 		case "struct_declaration":
-			self.process_composite(node, append_newline: true);
+			self.process_composite(
+				node,
+				skip_space_type: { "generic_param_list", "generic_arg_list" },
+				append_newline: true
+			);
 		case "struct_body":
 			self.buf.newline();
 			self.buf.text("{");
@@ -1420,9 +1424,17 @@ fn void C3Fmt.process_node(
 		case "struct_member_declaration":
 			self.process_composite(node, append_newline: true);
 		case "enum_declaration":
-			self.process_composite(node, append_newline: true);
+			self.process_composite(
+				node,
+				skip_space_type: { "generic_param_list", "generic_arg_list" },
+				append_newline: true
+			);
 		case "constdef_declaration":
-			self.process_composite(node, append_newline: true);
+			self.process_composite(
+				node,
+				skip_space_type: { "generic_param_list", "generic_arg_list" },
+				append_newline: true
+			);
 		case "enum_spec":
 			self.process_composite(node);
 		case "enum_body":
@@ -1477,7 +1489,11 @@ fn void C3Fmt.process_node(
 		case "enum_param":
 			self.process_composite(node);
 		case "bitstruct_declaration":
-			self.process_composite(node, append_newline: true);
+			self.process_composite(
+				node,
+				skip_space_type: { "generic_param_list", "generic_arg_list" },
+				append_newline: true
+			);
 		case "bitstruct_body":
 			self.buf.newline();
 			self.buf.text("{");
@@ -1612,7 +1628,7 @@ fn void C3Fmt.process_node(
 		case "func_signature":
 			self.process_composite(
 				node,
-				skip_space_type: { "func_param_list" }
+				skip_space_type: { "func_param_list", "generic_param_list", "generic_arg_list" }
 			);
 		case "var_declaration":
 			self.process_composite(node);
@@ -1675,7 +1691,7 @@ fn void C3Fmt.process_node(
 		case "catch_unwrap":
 			self.process_composite(node);
 		case "call_expr":
-			self.process_composite(node, skip_space_type: { "call_arg_list" });
+			self.process_composite(node, skip_space_type: { "call_arg_list", "generic_arg_list" });
 		case "call_arg_list":
 			if (node.has_child_of_type("call_arg"))
 			{
@@ -1799,9 +1815,9 @@ fn void C3Fmt.process_node(
 				skip_space_if_after: { "(" }
 			);
 		case "trailing_generic_expr":
-			self.process_composite(node);
+			self.process_composite(node, skip_space_type: { "generic_arg_list" });
 		case "generic_type_ident":
-			self.process_composite(node);
+			self.process_composite(node, skip_space_type: { "generic_arg_list" });
 		case "generic_arg_list":
 			self.process_composite(
 				node,
