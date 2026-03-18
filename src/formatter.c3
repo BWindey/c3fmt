@@ -64,8 +64,25 @@ fn void C3Fmt.dedent(&self)
 	if (self.indent_level > 0)
 	{
 		self.indent_level--;
+		self.buf.push(token::dedent());
 	}
-	self.buf.push(token::dedent());
+}
+
+fn Token? C3Fmt.pop_token(&self)
+{
+	Token? tok = self.buf.pop();
+	if (try t = tok)
+	{
+		if (t.kind == TokenKind.INDENT)
+		{
+			self.indent_level--;
+		}
+		else if (t.kind == TokenKind.DEDENT)
+		{
+			self.indent_level++;
+		}
+	}
+	return tok;
 }
 
 fn usz C3Fmt.current_column(&self)
@@ -159,7 +176,7 @@ fn bool C3Fmt.reattach_comment(&self, TSNode child, int blank_line_amount, bool 
 	{
 		if (last.kind == TokenKind.DEDENT)
 		{
-			(void)self.buf.pop();
+			(void)self.pop_token();
 			popped_indent = true;
 		}
 	}
@@ -174,13 +191,14 @@ fn bool C3Fmt.reattach_comment(&self, TSNode child, int blank_line_amount, bool 
 				if (popped_indent) self.dedent();
 				return false;
 			}
-			Token tok = self.buf.pop()!!;
+			Token tok = self.pop_token()!!;
 
 			if (tok.kind == TokenKind.INDENT)
 			{
 				if (!self.buf.gobble_last_newline())
 				{
 					self.buf.push(tok);
+					self.indent_level++;
 					if (popped_indent) self.dedent();
 					return false;
 				}
@@ -350,7 +368,7 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 		}
 
 		// Reset and format whole node without trailing newline to find comment col
-		while (self.buf.len() > start_buf_len) (void)self.buf.pop();
+		while (self.buf.len() > start_buf_len) (void)self.pop_token();
 
 		if (child.type() == "declaration_stmt" || child.type() == "global_declaration")
 		{
@@ -372,7 +390,7 @@ fn void C3Fmt.process_aligned_block(&self, TSNode parent, uint start_index, uint
 		}
 
 		while (self.buf.len() > start_buf_len) {
-			(void)self.buf.pop();
+			(void)self.pop_token();
 		}
 	}
 
@@ -1236,7 +1254,10 @@ fn void C3Fmt.collapse_single_line(&self, usz start_idx)
 		}
 	}
 
-	while (self.buf.len() > write_idx) (void)self.buf.pop();
+	while (self.buf.len() > write_idx)
+	{
+		(void)self.pop_token();
+	}
 	self.buf.push(token::newline());
 }
 
@@ -2020,7 +2041,7 @@ fn void C3Fmt.process_node(
 			self.dedent(); // restick
 			self.process_uncanny_scope(node, scope_enter_type: "$else");
 			if (try t = self.buf.last()) {
-				if (t.kind == DEDENT) (void)self.buf.pop();
+				if (t.kind == DEDENT) (void)self.pop_token();
 			}
 		case "ct_for_stmt":
 			self.process_uncanny_scope(node, scope_exit_type: "$endfor");
