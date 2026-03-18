@@ -74,6 +74,10 @@ fn void alignment() @test {
     test("alignment", "test/corpus/alignment.c3", "test/corpus/alignment_f.c3", conf);
 }
 
+fn void indent_leak() @test {
+    test("indent_leak", "test/corpus/indent_leak.c3", "test/corpus/indent_leak_f.c3");
+}
+
 fn void generics() @test {
     test("generics", "test/corpus/generics.c3", "test/corpus/generics_f.c3");
 }

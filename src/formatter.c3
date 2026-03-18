@@ -1230,11 +1230,28 @@ fn void C3Fmt.process_doc_comment(&self, TSNode node)
 
 fn void C3Fmt.collapse_single_line(&self, usz start_idx)
 {
+	usz total_len = self.buf.len();
+	if (total_len <= start_idx) return;
+
+	for (usz i = start_idx; i < total_len; i++)
+	{
+		Token t = self.buf[i];
+		if (t.kind == TokenKind.INDENT)
+		{
+			self.indent_level--;
+		}
+		else if (t.kind == TokenKind.DEDENT)
+		{
+			self.indent_level++;
+		}
+	}
+
 	bool last_was_space = false;
 	usz write_idx = start_idx;
-	for (usz read_idx = start_idx; read_idx < self.buf.len(); read_idx++)
+	for (usz read_idx = start_idx; read_idx < total_len; read_idx++)
 	{
 		Token t = self.buf[read_idx];
+
 		if (t.kind == NEWLINE || t.kind == INDENT || t.kind == DEDENT)
 		{
 			if (!last_was_space && write_idx > start_idx)
@@ -1256,7 +1273,7 @@ fn void C3Fmt.collapse_single_line(&self, usz start_idx)
 
 	while (self.buf.len() > write_idx)
 	{
-		(void)self.pop_token();
+		(void)self.buf.pop();
 	}
 	self.buf.push(token::newline());
 }
