@@ -154,6 +154,19 @@ module c3fmt @private;
 import std::io;
 import ts;
 
+fn void C3Fmt.add_brace(&self) {
+	switch (self.config.brace_style) {
+		case ALLMAN:
+			self.buf.newline();
+			self.buf.text("{");
+			self.buf.newline();
+		case K_AND_R:
+			self.buf.space();
+			self.buf.text("{");
+			self.buf.newline();
+	}
+}
+
 <*
  Reattach a comment node to the previous statement when it appears immediately
  after it (blank_line_amount == 0, trailing) or one line below a scope-exit
@@ -1004,10 +1017,7 @@ fn void C3Fmt.process_asm_block_stmt(&self, TSNode node)
 				{
 					if (type == "{")
 					{
-						// TODO
-						self.buf.newline();
-						self.buf.text("{");
-						self.buf.newline();
+						self.add_brace();
 						self.indent();
 						in_scope = true;
 						in_scope_id = i;
@@ -1397,9 +1407,7 @@ fn void C3Fmt.process_node(
 			switch (child.type())
 			{
 				case "compound_stmt":
-					self.buf.newline();
-					self.buf.text("{");
-					self.buf.newline();
+					self.add_brace();
 					self.indent();
 					self.process_compound(child);
 					self.dedent();
@@ -1431,9 +1439,7 @@ fn void C3Fmt.process_node(
 				append_newline: true
 			);
 		case "struct_body":
-			self.buf.newline();
-			self.buf.text("{");
-			self.buf.newline();
+			self.add_brace();
 			self.indent();
 			self.process_compound(node);
 			self.dedent();
@@ -1455,9 +1461,7 @@ fn void C3Fmt.process_node(
 		case "enum_spec":
 			self.process_composite(node);
 		case "enum_body":
-			self.buf.newline();
-			self.buf.text("{");
-			self.buf.newline();
+			self.add_brace();
 			self.indent();
 			self.process_compound(node);
 			self.dedent();
@@ -1512,9 +1516,7 @@ fn void C3Fmt.process_node(
 				append_newline: true
 			);
 		case "bitstruct_body":
-			self.buf.newline();
-			self.buf.text("{");
-			self.buf.newline();
+			self.add_brace();
 			self.indent();
 			self.process_compound(node);
 			self.dedent();
@@ -1533,9 +1535,7 @@ fn void C3Fmt.process_node(
 				append_newline: true
 			);
 		case "interface_body":
-			self.buf.newline();
-			self.buf.text("{");
-			self.buf.newline();
+			self.add_brace();
 			self.indent();
 			self.process_compound(node);
 			self.dedent();
@@ -2013,9 +2013,7 @@ fn void C3Fmt.process_node(
 				append_newline: true
 			);
 		case "switch_body":
-			self.buf.newline();
-			self.buf.text("{");
-			self.buf.newline();
+			self.add_brace();
 			self.indent();
 			self.process_compound(node);
 			self.dedent();
