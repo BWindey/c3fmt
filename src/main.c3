@@ -130,7 +130,7 @@ fn int main(String[] args)
 
 	if (version_asked)
 	{
-		io::printfn("c3fmt version:     \t0.2.3");
+		io::printfn("c3fmt version:     \t0.2.3.bw.1");
 		io::printfn("target c3c version:\t0.7.11");
 		return 0;
 	}

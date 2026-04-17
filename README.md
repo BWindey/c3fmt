@@ -40,6 +40,21 @@ You can look at [.c3fmt](.c3fmt) for the default configuration.
 
 Building requires the [C3 compiler](https://c3-lang.org/) and the [tree-sitter](https://github.com/tree-sitter/tree-sitter) SDK library.
 
+> [!NOTE]
+> I did not really know how to get tree-sitter working for me, these were my
+> steps I took to make it work:
+> - move to the `lib/` folder of this repository
+> - `git clone https://github.com/tree-sitter/tree-sitter.git`
+> - `cd tree-sitter`
+> - `make`
+> - remove the shared object `libtree-sitter.so` (just want static linking)
+> - move back to root of this c3fmt project
+> - `c3c build -L lib/tree-sitter/` (or modify the `project.json` like it is in this
+>     repository, than you only need `c3c build`)
+>
+> This should then correctly build this project.
+
+
 To build the executable:
 ```bash
 c3c build

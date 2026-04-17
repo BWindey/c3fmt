@@ -1897,7 +1897,7 @@ fn void C3Fmt.process_node(
 		/* STATEMENTS & CONTROL FLOW */
 		/* ======================================== */
 		case "compound_stmt":
-			if (!inside_compound)
+			if (!inside_compound && self.config.brace_style == ALLMAN)
 			{
 				// shitty workaround to handle compound stmt
 				// for scope decl
@@ -1905,6 +1905,7 @@ fn void C3Fmt.process_node(
 			}
 
 			self.buf.text("{");
+
 			self.buf.newline();
 			self.indent();
 			self.process_compound(node);

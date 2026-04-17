@@ -3,6 +3,8 @@
   "warnings":  [ "no-unused" ],
   "dependency-search-paths":  [ "lib" ],
   "dependencies":  [ "tree_sitter", "tree_sitter_c3" ],
+  "linked-libraries": [ "tree-sitter" ],
+  "linker-search-paths": [ "lib/tree-sitter/" ],
   "authors":  [ "Lucas Michaudel <lucas.michaudel@gmail.com>" ],
   "version": "0.2.3",
   "sources":  [ "src/**" ],
